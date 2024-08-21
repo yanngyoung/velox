@@ -18,14 +18,6 @@
 
 namespace facebook::velox {
 
-uint32_t ByteRange::availableBytes() const {
-  return std::max(0, size - position);
-}
-
-std::string ByteRange::toString() const {
-  return fmt::format("[{} starting at {}]", succinctBytes(size), position);
-}
-
 std::string BufferInputStream::toString() const {
   std::stringstream oss;
   oss << ranges_.size() << " ranges (position/size) [";
