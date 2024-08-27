@@ -27,6 +27,7 @@ velox_add_library(
   velox_common_base
   BitUtil.cpp
   ByteInputStream.cpp
+  ByteOutputStream.cpp
   Counters.cpp
   Fs.cpp
   PeriodicStatsReporter.cpp

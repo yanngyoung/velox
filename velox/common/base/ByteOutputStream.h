@@ -15,127 +15,12 @@
  */
 #pragma once
 
-#include <folly/io/IOBuf.h>
-#include "velox/common/base/ByteInputStream.h"
-#include "velox/common/base/Scratch.h"
+#include "velox/common/memory/BufferInputStream.h"
 #include "velox/common/memory/StreamArena.h"
-
-#include <folly/io/IOBuf.h>
-#include <memory>
 
 namespace facebook::velox {
 
-class OutputStreamListener {
- public:
-  virtual void onWrite(const char* /* s */, std::streamsize /* count */) {}
-  virtual ~OutputStreamListener() = default;
-};
-
-class OutputStream {
- public:
-  explicit OutputStream(OutputStreamListener* listener = nullptr)
-      : listener_(listener) {}
-
-  virtual ~OutputStream() = default;
-
-  virtual void write(const char* s, std::streamsize count) = 0;
-
-  virtual std::streampos tellp() const = 0;
-
-  virtual void seekp(std::streampos pos) = 0;
-
-  OutputStreamListener* listener() const {
-    return listener_;
-  }
-
- protected:
-  OutputStreamListener* listener_;
-};
-
-class OStreamOutputStream : public OutputStream {
- public:
-  explicit OStreamOutputStream(
-      std::ostream* out,
-      OutputStreamListener* listener = nullptr)
-      : OutputStream(listener), out_(out) {}
-
-  void write(const char* s, std::streamsize count) override {
-    out_->write(s, count);
-    if (listener_) {
-      listener_->onWrite(s, count);
-    }
-  }
-
-  std::streampos tellp() const override {
-    return out_->tellp();
-  }
-
-  void seekp(std::streampos pos) override {
-    out_->seekp(pos);
-  }
-
- private:
-  std::ostream* out_;
-};
-
-/// Read-only input stream backed by a set of buffers.
-class BufferInputStream : public ByteInputStream {
- public:
-  explicit BufferInputStream(std::vector<ByteRange> ranges) {
-    VELOX_CHECK(!ranges.empty(), "Empty BufferInputStream");
-    ranges_ = std::move(ranges);
-    current_ = &ranges_[0];
-  }
-
-  BufferInputStream(const BufferInputStream&) = delete;
-  BufferInputStream& operator=(const BufferInputStream& other) = delete;
-  BufferInputStream(BufferInputStream&& other) noexcept = delete;
-  BufferInputStream& operator=(BufferInputStream&& other) noexcept = delete;
-
-  size_t size() const override;
-
-  bool atEnd() const override;
-
-  std::streampos tellp() const override;
-
-  void seekp(std::streampos pos) override;
-
-  size_t remainingSize() const override;
-
-  uint8_t readByte() override;
-
-  void readBytes(uint8_t* bytes, int32_t size) override;
-
-  std::string_view nextView(int32_t size) override;
-
-  void skip(int32_t size) override;
-
-  std::string toString() const override;
-
- private:
-  // Sets 'current_' to the next range of input. The input is consecutive
-  // ByteRanges in 'ranges_' for the base class but any view over external
-  // buffers can be made by specialization.
-  void nextRange();
-
-  const std::vector<ByteRange>& ranges() const {
-    return ranges_;
-  }
-};
-
-template <>
-inline Timestamp ByteInputStream::read<Timestamp>() {
-  Timestamp value;
-  readBytes(reinterpret_cast<uint8_t*>(&value), sizeof(value));
-  return value;
-}
-
-template <>
-inline int128_t ByteInputStream::read<int128_t>() {
-  int128_t value;
-  readBytes(reinterpret_cast<uint8_t*>(&value), sizeof(value));
-  return value;
-}
+class OutputStream;
 
 /// Stream over a chain of ByteRanges. Provides read, write and
 /// comparison for equality between stream contents and memory. Used
@@ -375,38 +260,6 @@ class AppendWindow {
  private:
   ByteOutputStream& stream_;
   ScratchPtr<T> scratchPtr_;
-};
-
-class IOBufOutputStream : public OutputStream {
- public:
-  explicit IOBufOutputStream(
-      memory::MemoryPool& pool,
-      OutputStreamListener* listener = nullptr,
-      int32_t initialSize = memory::AllocationTraits::kPageSize)
-      : OutputStream(listener),
-        arena_(std::make_shared<StreamArena>(&pool)),
-        out_(std::make_unique<ByteOutputStream>(arena_.get())) {
-    out_->startWrite(initialSize);
-  }
-
-  void write(const char* s, std::streamsize count) override {
-    out_->appendStringView(std::string_view(s, count));
-    if (listener_) {
-      listener_->onWrite(s, count);
-    }
-  }
-
-  std::streampos tellp() const override;
-
-  void seekp(std::streampos pos) override;
-
-  /// 'releaseFn' is executed on iobuf destruction if not null.
-  std::unique_ptr<folly::IOBuf> getIOBuf(
-      const std::function<void()>& releaseFn = nullptr);
-
- private:
-  std::shared_ptr<StreamArena> arena_;
-  std::unique_ptr<ByteOutputStream> out_;
 };
 
 } // namespace facebook::velox

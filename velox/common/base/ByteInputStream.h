@@ -98,4 +98,18 @@ class ByteInputStream {
   std::vector<ByteRange> ranges_;
 };
 
+template <>
+inline Timestamp ByteInputStream::read<Timestamp>() {
+  Timestamp value;
+  readBytes(reinterpret_cast<uint8_t*>(&value), sizeof(value));
+  return value;
+}
+
+template <>
+inline int128_t ByteInputStream::read<int128_t>() {
+  int128_t value;
+  readBytes(reinterpret_cast<uint8_t*>(&value), sizeof(value));
+  return value;
+}
+
 } // namespace facebook::velox
